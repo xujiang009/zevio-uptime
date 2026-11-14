@@ -1,0 +1,39 @@
+name: zevio-keepalive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping ZEVIO Singapore
+        run: |
+          for i in 1 2 3 4; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 40 https://chaolequan-sg.onrender.com/health || true)
+            echo "ping $i -> $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Checkout for daily heartbeat
+        if: github.event.schedule == '0 0 * * *'
+        uses: actions/checkout@v4
+
+      - name: Daily heartbeat commit
+        if: github.event.schedule == '0 0 * * *'
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > last-run.txt
+          git config user.name "zevio-uptime-bot"
+          git config user.email "zevio-uptime-bot@users.noreply.github.com"
+          git add last-run.txt
+          git commit -m "keepalive $(date -u +%F)" || true
+          git push
